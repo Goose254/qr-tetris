@@ -166,32 +166,44 @@ export function InputScreen({
   gs,
   setGs,
   onStart,
+  loading = false,
   theme,
   onThemeChange,
 }: {
   gs: GState;
   setGs: Dispatch<SetStateAction<GState>>;
   onStart: () => void;
+  loading?: boolean;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
 }) {
   const colors = tk(theme);
 
   return (
-    <div style={{ background: colors.bg, minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 36, padding: 24, position: 'relative' }}>
+    <div style={{ background: colors.bg, minHeight: '100dvh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 32, padding: 24, position: 'relative' }}>
       <div style={{ position: 'absolute', top: 16, right: 16 }}>
         <SettingsPanel theme={theme} onChange={onThemeChange} />
       </div>
 
       <AppTitle theme={theme} size="lg" />
 
-      <p style={{ color: colors.textMuted, fontFamily: 'monospace', fontSize: 13, textAlign: 'center', maxWidth: 360, lineHeight: 1.8, margin: 0 }}>
-        Le QR est découpé en tétrominos classiques.
-        <br />
-        Ils tombent un par un et doivent reformer exactement la grille.
-        <br />
-        Une erreur de placement et la partie est perdue.
-      </p>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12, maxWidth: 360, textAlign: 'center' }}>
+        <p style={{ color: colors.text, fontFamily: 'monospace', fontSize: 14, lineHeight: 1.7, margin: 0, fontWeight: 700 }}>
+          Générer un QR code, c&apos;était bien trop facile.
+          <br />
+          <span style={{ color: theme.accent }}>Il est temps de changer ça.</span>
+        </p>
+        <p style={{ color: colors.textMuted, fontFamily: 'monospace', fontSize: 12, lineHeight: 1.9, margin: 0 }}>
+          Le QR est découpé en tétrominos qui tombent un à un.
+          <br />
+          Chaque pièce doit atterrir exactement à sa place.
+          <br />
+          Une erreur de placement et la partie est perdue.
+        </p>
+        <p style={{ color: colors.textMuted, fontFamily: 'monospace', fontSize: 12, margin: 0, opacity: 0.7 }}>
+          Si vous voulez votre QR code, méritez-le. Bonne chance.
+        </p>
+      </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 300 }}>
         <label style={{ color: colors.textMuted, fontFamily: 'monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '2px' }}>
@@ -201,7 +213,7 @@ export function InputScreen({
           type="text"
           value={gs.inputText}
           onChange={event => setGs(state => ({ ...state, inputText: event.target.value }))}
-          onKeyDown={event => event.key === 'Enter' && onStart()}
+          onKeyDown={event => event.key === 'Enter' && !loading && onStart()}
           style={{
             background: colors.bgInput,
             border: `1px solid ${colors.border}`,
@@ -216,24 +228,48 @@ export function InputScreen({
             boxSizing: 'border-box',
           }}
           autoFocus
+          disabled={loading}
         />
         <button
           onClick={onStart}
+          disabled={loading}
           style={{
             background: theme.accent,
             color: '#000000',
             padding: '12px',
             borderRadius: 8,
             border: 'none',
-            cursor: 'pointer',
+            cursor: loading ? 'not-allowed' : 'pointer',
             fontFamily: 'monospace',
             fontWeight: 900,
             fontSize: 16,
             letterSpacing: '3px',
             boxShadow: `0 4px 20px ${theme.accent}55`,
+            opacity: loading ? 0.75 : 1,
+            transition: 'opacity 0.2s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
           }}
         >
-          JOUER →
+          {loading ? (
+            <>
+              <span
+                style={{
+                  width: 14,
+                  height: 14,
+                  borderRadius: '50%',
+                  border: '2px solid #00000040',
+                  borderTopColor: '#000000',
+                  display: 'inline-block',
+                  animation: 'qrt-spin 0.7s linear infinite',
+                  flexShrink: 0,
+                }}
+              />
+              Génération en cours...
+            </>
+          ) : 'JOUER →'}
         </button>
       </div>
 
@@ -262,12 +298,14 @@ export function VictoryPanel({ inputText, theme, onRestart }: { inputText: strin
     >
       <div>
         <h2 style={{ color: theme.accent, fontFamily: 'monospace', fontWeight: 900, fontSize: 22, margin: '0 0 6px' }}>
-          QR PRÊT
+          MÉRITÉ.
         </h2>
         <p style={{ color: colors.textMuted, fontFamily: 'monospace', fontSize: 12, lineHeight: 1.7, margin: 0 }}>
-          La grille reste en place et bascule en QR final.
+          Vous l&apos;avez gagné, pièce par pièce.
           <br />
-          Scanne directement le plateau.
+          La grille bascule en QR final —
+          <br />
+          scanne directement le plateau.
         </p>
       </div>
 
@@ -322,23 +360,22 @@ export function PiecePreview({
           background: colors.skyBg,
         }}
       >
-        {piece.cells.flatMap((isBlack, index) => {
-          const row = Math.floor(index / piece.width);
-          const col = index % piece.width;
-          const filled = piece.mask[row][col];
-
-          return (
-            <div
-              key={index}
-              style={{
-                width: cellSize,
-                height: cellSize,
-                backgroundColor: filled ? (isBlack ? '#050505' : '#fffdfa') : 'transparent',
-                border: filled ? `1px solid ${isBlack ? theme.accent + 'cc' : theme.accent + '77'}` : '1px solid transparent',
-              }}
-            />
-          );
-        })}
+        {piece.cells.flatMap((rowCells, rowIdx) =>
+          rowCells.map((isBlack, colIdx) => {
+            const filled = piece.mask[rowIdx][colIdx];
+            return (
+              <div
+                key={`${rowIdx}-${colIdx}`}
+                style={{
+                  width: cellSize,
+                  height: cellSize,
+                  backgroundColor: filled ? (isBlack ? '#050505' : '#fffdfa') : 'transparent',
+                  border: filled ? `1px solid ${isBlack ? theme.accent + 'cc' : theme.accent + '77'}` : '1px solid transparent',
+                }}
+              />
+            );
+          })
+        )}
       </div>
     </div>
   );

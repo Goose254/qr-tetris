@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState } from 'react';
 
 import { CELL_SIZE_MAX, CELL_SIZE_MIN, FALL_MS } from './qr-tetris/constants';
 import GameBoard from './qr-tetris/GameBoard';
-import { buildPlayablePieces, buildQR, calcGhostRow, canPlace, lockPiece, seededBoard } from './qr-tetris/logic';
+import { buildPlayablePieces, buildQR, calcDropRow, canPlace, lockPiece, seededBoard } from './qr-tetris/logic';
 import { tk } from './qr-tetris/theme';
 import { persistTheme, useThemeStore } from './qr-tetris/themeStore';
 import type { GState } from './qr-tetris/types';
@@ -33,6 +33,7 @@ function clamp(value: number, min: number, max: number) {
 
 export default function QrTetrisGame() {
   const [gs, setGs] = useState<GState>(INIT);
+  const [loading, setLoading] = useState(false);
   const theme = useThemeStore();
   const [viewport, setViewport] = useState(getViewport);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
@@ -62,6 +63,20 @@ export default function QrTetrisGame() {
   useEffect(() => {
     document.body.style.backgroundColor = tk(theme).bg;
   }, [theme]);
+
+  useEffect(() => {
+    const a = theme.accent;
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 216 216"><g transform="translate(24 24)"><rect width="24" height="24" fill="${a}"/><rect x="24" width="24" height="24" fill="${a}"/><rect x="48" width="24" height="24" fill="${a}"/><rect x="72" width="24" height="24" fill="${a}"/><rect x="96" width="24" height="24" fill="${a}"/><rect x="120" width="24" height="24" fill="${a}"/><rect x="144" width="24" height="24" fill="${a}"/><rect y="24" width="24" height="24" fill="${a}"/><rect x="144" y="24" width="24" height="24" fill="${a}"/><rect y="48" width="24" height="24" fill="${a}"/><rect x="48" y="48" width="24" height="24" fill="${a}"/><rect x="72" y="48" width="24" height="24" fill="${a}"/><rect x="96" y="48" width="24" height="24" fill="${a}"/><rect x="144" y="48" width="24" height="24" fill="${a}"/><rect y="72" width="24" height="24" fill="${a}"/><rect x="48" y="72" width="24" height="24" fill="${a}"/><rect x="72" y="72" width="24" height="24" fill="${a}"/><rect x="96" y="72" width="24" height="24" fill="${a}"/><rect x="48" y="96" width="24" height="24" fill="${a}"/><rect x="72" y="96" width="24" height="24" fill="${a}"/><rect x="96" y="96" width="24" height="24" fill="${a}"/><rect x="144" y="72" width="24" height="24" fill="${a}"/><rect y="96" width="24" height="24" fill="${a}"/><rect x="144" y="96" width="24" height="24" fill="${a}"/><rect y="120" width="24" height="24" fill="${a}"/><rect x="144" y="120" width="24" height="24" fill="${a}"/><rect y="144" width="24" height="24" fill="${a}"/><rect x="24" y="144" width="24" height="24" fill="${a}"/><rect x="48" y="144" width="24" height="24" fill="${a}"/><rect x="72" y="144" width="24" height="24" fill="${a}"/><rect x="96" y="144" width="24" height="24" fill="${a}"/><rect x="120" y="144" width="24" height="24" fill="${a}"/><rect x="144" y="144" width="24" height="24" fill="${a}"/></g><g transform="translate(150 150)"><rect width="30" height="30" rx="7" fill="#fff"/><rect x="30" width="30" height="30" rx="7" fill="#fff"/><rect y="30" width="30" height="30" rx="7" fill="#fff"/><rect x="30" y="30" width="30" height="30" rx="7" fill="#fff"/></g></svg>`;
+    const href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+    let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
+    }
+    link.type = 'image/svg+xml';
+    link.href = href;
+  }, [theme.accent]);
 
   useEffect(() => {
     if (gs.status !== 'playing') return;
@@ -106,7 +121,7 @@ export default function QrTetrisGame() {
           return lockPiece(prev, prev.currentCol, prev.currentRow);
         }
 
-        const ghostRow = calcGhostRow(piece, prev.currentCol, prev.board);
+        const ghostRow = calcDropRow(piece, prev.currentCol, prev.currentRow, prev.board);
         return lockPiece(prev, prev.currentCol, ghostRow);
       });
     };
@@ -116,22 +131,29 @@ export default function QrTetrisGame() {
   }, []);
 
   const startGame = useCallback(async () => {
-    const text = gs.inputText.trim() || 'https://example.com';
-    const { matrix, size } = await buildQR(text);
-    const pieces = buildPlayablePieces(matrix, size);
-    const first = pieces[0];
+    setLoading(true);
+    try {
+      const text = gs.inputText.trim() || 'https://example.com';
+      const { matrix, size } = await buildQR(text);
+      // Yield to the event loop so the loading state renders before the synchronous solver runs.
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const pieces = buildPlayablePieces(matrix, size);
+      const first = pieces[0];
 
-    setGs({
-      status: 'playing',
-      qrMatrix: matrix,
-      qrSize: size,
-      pieces,
-      board: seededBoard(matrix, size),
-      currentIndex: 0,
-      currentCol: Math.floor((size - first.width) / 2),
-      currentRow: 0,
-      inputText: text,
-    });
+      setGs({
+        status: 'playing',
+        qrMatrix: matrix,
+        qrSize: size,
+        pieces,
+        board: seededBoard(matrix, size),
+        currentIndex: 0,
+        currentCol: first.spawnCol,
+        currentRow: 0,
+        inputText: text,
+      });
+    } finally {
+      setLoading(false);
+    }
   }, [gs.inputText]);
 
   const restart = useCallback(() => setGs(state => ({ ...INIT, inputText: state.inputText })), []);
@@ -168,13 +190,13 @@ export default function QrTetrisGame() {
     setGs(prev => {
       if (prev.status !== 'playing') return prev;
       const piece = prev.pieces[prev.currentIndex];
-      const ghostRow = calcGhostRow(piece, prev.currentCol, prev.board);
+      const ghostRow = calcDropRow(piece, prev.currentCol, prev.currentRow, prev.board);
       return lockPiece(prev, prev.currentCol, ghostRow);
     });
   }, []);
 
   if (gs.status === 'input') {
-    return <InputScreen gs={gs} setGs={setGs} onStart={startGame} theme={theme} onThemeChange={handleTheme} />;
+    return <InputScreen gs={gs} setGs={setGs} onStart={startGame} loading={loading} theme={theme} onThemeChange={handleTheme} />;
   }
 
   const colors = tk(theme);
@@ -185,7 +207,7 @@ export default function QrTetrisGame() {
   const nextPiece = !isGameOver && !isWin ? (gs.pieces[gs.currentIndex + 1] ?? null) : null;
   const boardHeight = gs.board.length;
   const completedPieces = isWin ? gs.pieces.length : gs.currentIndex;
-  const ghostRow = piece ? calcGhostRow(piece, gs.currentCol, gs.board) : -1;
+  const ghostRow = piece ? calcDropRow(piece, gs.currentCol, gs.currentRow, gs.board) : -1;
   const compactLayout = viewport.width < 980;
   const showTouchControls = isCoarsePointer;
   const reservedHeight = compactLayout ? (showTouchControls ? 390 : 300) : 170;

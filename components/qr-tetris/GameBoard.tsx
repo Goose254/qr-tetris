@@ -159,8 +159,11 @@ export default function GameBoard({
                 boxShadow: '0 18px 34px rgba(0, 0, 0, 0.34)',
               }}
             >
-              <div style={{ color: '#fecaca', fontFamily: 'monospace', fontWeight: 800, fontSize: 15, marginBottom: 10 }}>
-                Mauvaise position
+              <div style={{ color: '#ef4444', fontFamily: 'monospace', fontWeight: 900, fontSize: 17, marginBottom: 4, letterSpacing: '1px' }}>
+                PERDU.
+              </div>
+              <div style={{ color: '#fecaca', fontFamily: 'monospace', fontSize: 11, lineHeight: 1.6, marginBottom: 12, opacity: 0.8 }}>
+                Ce QR code ne se mérite pas si facilement.
               </div>
               <button
                 onClick={onRestart}
@@ -176,7 +179,7 @@ export default function GameBoard({
                   fontSize: 13,
                 }}
               >
-                Recommencer
+                Réessayer
               </button>
             </div>
           </div>

@@ -4,6 +4,7 @@ export interface Piece {
   mask: boolean[][];
   expectedCol: number;
   expectedRow: number;
+  spawnCol: number;
   width: number;
   height: number;
   sortRow: number;
