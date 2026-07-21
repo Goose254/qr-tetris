@@ -82,8 +82,10 @@ export function SettingsPanel({ theme, onChange }: { theme: Theme; onChange: (th
           transition: 'border-color 0.2s, color 0.2s',
         }}
         title="Paramètres"
+        aria-label="Paramètres"
+        aria-expanded={open}
       >
-        ⚙
+        <span aria-hidden="true">⚙</span>
       </button>
 
       {open && (
@@ -127,7 +129,7 @@ export function SettingsPanel({ theme, onChange }: { theme: Theme; onChange: (th
                   gap: 8,
                 }}
               >
-                <span>{theme.mode === 'dark' ? '☀️' : '🌙'}</span>
+                <span aria-hidden="true">{theme.mode === 'dark' ? '☀️' : '🌙'}</span>
                 <span>{theme.mode === 'dark' ? 'Mode clair' : 'Mode sombre'}</span>
               </button>
             </div>
@@ -142,6 +144,8 @@ export function SettingsPanel({ theme, onChange }: { theme: Theme; onChange: (th
                     key={accent.value}
                     onClick={() => onChange({ ...theme, accent: accent.value })}
                     title={accent.label}
+                    aria-label={`Couleur ${accent.label}`}
+                    aria-pressed={theme.accent === accent.value}
                     style={{
                       height: 28,
                       borderRadius: 7,
@@ -167,6 +171,7 @@ export function InputScreen({
   setGs,
   onStart,
   loading = false,
+  error = null,
   theme,
   onThemeChange,
 }: {
@@ -174,6 +179,7 @@ export function InputScreen({
   setGs: Dispatch<SetStateAction<GState>>;
   onStart: () => void;
   loading?: boolean;
+  error?: string | null;
   theme: Theme;
   onThemeChange: (theme: Theme) => void;
 }) {
@@ -206,10 +212,11 @@ export function InputScreen({
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10, width: '100%', maxWidth: 300 }}>
-        <label style={{ color: colors.textMuted, fontFamily: 'monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '2px' }}>
+        <label htmlFor="qr-input" style={{ color: colors.textMuted, fontFamily: 'monospace', fontSize: 10, textTransform: 'uppercase', letterSpacing: '2px' }}>
           URL ou texte
         </label>
         <input
+          id="qr-input"
           type="text"
           value={gs.inputText}
           onChange={event => setGs(state => ({ ...state, inputText: event.target.value }))}
@@ -271,6 +278,21 @@ export function InputScreen({
             </>
           ) : 'JOUER →'}
         </button>
+        {error && (
+          <p
+            role="alert"
+            style={{
+              color: '#ef4444',
+              fontFamily: 'monospace',
+              fontSize: 12,
+              lineHeight: 1.7,
+              margin: 0,
+              textAlign: 'center',
+            }}
+          >
+            {error}
+          </p>
+        )}
       </div>
 
       <div style={{ color: colors.textMuted, fontFamily: 'monospace', fontSize: 11, textAlign: 'center', lineHeight: 2 }}>
@@ -381,11 +403,24 @@ export function PiecePreview({
   );
 }
 
-function TouchButton({ label, onPress, theme, grow = false }: { label: string; onPress: () => void; theme: Theme; grow?: boolean }) {
+function TouchButton({
+  label,
+  ariaLabel,
+  onPress,
+  theme,
+  grow = false,
+}: {
+  label: string;
+  ariaLabel?: string;
+  onPress: () => void;
+  theme: Theme;
+  grow?: boolean;
+}) {
   const colors = tk(theme);
 
   return (
     <button
+      aria-label={ariaLabel}
       onPointerDown={event => {
         event.preventDefault();
         onPress();
@@ -437,11 +472,11 @@ export function TouchControls({
         Tactile
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))', gap: 8 }}>
-        <TouchButton label="←" onPress={onMoveLeft} theme={theme} />
-        <TouchButton label="↓" onPress={onSoftDrop} theme={theme} />
-        <TouchButton label="→" onPress={onMoveRight} theme={theme} />
+        <TouchButton label="←" ariaLabel="Déplacer à gauche" onPress={onMoveLeft} theme={theme} />
+        <TouchButton label="↓" ariaLabel="Descendre d'une case" onPress={onSoftDrop} theme={theme} />
+        <TouchButton label="→" ariaLabel="Déplacer à droite" onPress={onMoveRight} theme={theme} />
       </div>
-      <TouchButton label="DROP" onPress={onHardDrop} theme={theme} grow />
+      <TouchButton label="DROP" ariaLabel="Chute instantanée" onPress={onHardDrop} theme={theme} grow />
     </div>
   );
 }

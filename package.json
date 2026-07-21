@@ -2,15 +2,33 @@
   "name": "qr-tetris",
   "version": "0.1.0",
   "private": true,
+  "description": "A playable QR code generator: build your QR code yourself by dropping tetromino pieces, Tetris-style.",
+  "author": "Vincent Douay",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Goose254/qr-tetris.git"
+  },
+  "homepage": "https://qr-tetris.douay.me",
+  "keywords": [
+    "qr-code",
+    "tetris",
+    "game",
+    "generator",
+    "nextjs",
+    "react",
+    "typescript"
+  ],
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "vitest run"
   },
   "dependencies": {
     "@types/qrcode": "^1.5.6",
-    "next": "16.2.0",
+    "next": "16.2.10",
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"
@@ -23,6 +41,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.2.0",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^4.1.10"
   }
 }

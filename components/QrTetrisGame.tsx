@@ -34,6 +34,7 @@ function clamp(value: number, min: number, max: number) {
 export default function QrTetrisGame() {
   const [gs, setGs] = useState<GState>(INIT);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const theme = useThemeStore();
   const [viewport, setViewport] = useState(getViewport);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
@@ -132,6 +133,7 @@ export default function QrTetrisGame() {
 
   const startGame = useCallback(async () => {
     setLoading(true);
+    setError(null);
     try {
       const text = gs.inputText.trim() || 'https://example.com';
       const { matrix, size } = await buildQR(text);
@@ -151,6 +153,9 @@ export default function QrTetrisGame() {
         currentRow: 0,
         inputText: text,
       });
+    } catch (err) {
+      console.error('Failed to build a playable QR layout:', err);
+      setError('Impossible de générer une partie pour ce texte. Vérifiez qu’il n’est pas trop long, puis réessayez.');
     } finally {
       setLoading(false);
     }
@@ -196,7 +201,7 @@ export default function QrTetrisGame() {
   }, []);
 
   if (gs.status === 'input') {
-    return <InputScreen gs={gs} setGs={setGs} onStart={startGame} loading={loading} theme={theme} onThemeChange={handleTheme} />;
+    return <InputScreen gs={gs} setGs={setGs} onStart={startGame} loading={loading} error={error} theme={theme} onThemeChange={handleTheme} />;
   }
 
   const colors = tk(theme);
