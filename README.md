@@ -6,6 +6,28 @@ Générer un QR code, c'était bien trop facile. **QR Tetris** est un générate
 
 ![Capture d'écran](./screenshot.png)
 
+## English summary
+
+**QR Tetris** is a playable QR code generator: the QR code of your URL (or of any text) is cut into tetrominoes that fall one by one, and you have to drop each of them exactly where it belongs, Tetris-style. One misplaced piece and the game is lost; once the grid is complete, it is a real QR code you can scan straight from the board. Play it at [qr-tetris.douay.me](https://qr-tetris.douay.me/). The rest of this README is in French.
+
+How the solver works (`components/qr-tetris/logic.ts`):
+
+- The text is encoded as a QR code (error correction level M); one "anchor" cell is pre-placed in the bottom-right corner so that the number of remaining cells is divisible by 4.
+- The grid is split into random macro regions made of 4×4 blocks (1×1, 1×2 or 2×1 blocks), solved one after the other from bottom to top; a multi-block region that cannot be solved is split again into single blocks.
+- Each region is an exact-cover problem solved by backtracking: the solver works on the lowest uncovered row, picks the cell with the fewest possible placements (minimum remaining values) and caches dead ends.
+- A placement only counts if the piece is playable: a breadth-first search checks that it can travel from a spawn column to its target using left, right and down moves only, and that it locks there.
+- Each region solve is bounded (3 s and 120,000 steps); 8 full attempts are always run and one of the distinct layouts found is picked at random.
+- All of this runs in a Web Worker so the page stays responsive, with a fallback on the main thread.
+
+How to run it:
+
+```bash
+npm install
+npm run dev              # http://localhost:3000
+npm test && npm run lint
+npm run build && npm start
+```
+
 ## Comment ça marche
 
 Le cœur du projet est un solveur de pavage (`components/qr-tetris/logic.ts`) qui transforme un QR code en une partie de Tetris gagnable :
@@ -20,7 +42,9 @@ Le cœur du projet est un solveur de pavage (`components/qr-tetris/logic.ts`) qu
 
 5. **Jouabilité garantie** — Un pavage valide ne suffit pas : chaque pièce doit aussi être *jouable*. Le solveur vérifie par un parcours en largeur (BFS) qu'il existe une colonne d'apparition depuis laquelle la pièce peut réellement descendre jusqu'à sa position cible avec les seuls déplacements du Tetris (gauche, droite, descente), et qu'elle s'y verrouille naturellement. C'est pourquoi les pièces sont ordonnées de bas en haut.
 
-6. **Garde-fous** — Le solveur est borné en temps (3 s) et en nombre d'étapes (120 000) par tentative ; jusqu'à 8 tentatives sont lancées et une solution est tirée au hasard parmi celles qui aboutissent, pour que chaque partie soit différente.
+6. **Garde-fous** — La borne en temps (3 s) et en nombre d'étapes (120 000) s'applique à **chaque résolution de région** (`solveCandidateSet`), pas à la tentative entière : une tentative enchaîne toutes les régions de la grille (plus les blocs individuels d'une région re-découpée), elle n'a donc pas de plafond global et peut durer bien plus de 3 s sur un grand QR code. Le solveur lance toujours 8 tentatives complètes, sans s'arrêter à la première réussite, puis tire une solution au hasard parmi les pavages distincts obtenus, pour que chaque partie soit différente ; si aucune tentative n'aboutit, la génération échoue avec un message d'erreur.
+
+Tout ce calcul (encodage du QR + pavage) s'exécute dans un **Web Worker** (`components/qr-tetris/generate.worker.ts`, simple enveloppe autour de `logic.ts`) pour que l'interface reste fluide pendant la génération, avec repli sur le thread principal si le worker est indisponible.
 
 ## Stack technique
 
