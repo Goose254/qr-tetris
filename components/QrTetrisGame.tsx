@@ -1,10 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CELL_SIZE_MAX, CELL_SIZE_MIN, FALL_MS } from './qr-tetris/constants';
 import GameBoard from './qr-tetris/GameBoard';
-import { buildPlayablePieces, buildQR, calcDropRow, canPlace, lockPiece, seededBoard } from './qr-tetris/logic';
+import { createGameGenerator, GenerationCancelledError } from './qr-tetris/gameGenerator';
+import type { GameGenerator } from './qr-tetris/gameGenerator';
+import { calcDropRow, canPlace, lockPiece, seededBoard } from './qr-tetris/logic';
 import { tk } from './qr-tetris/theme';
 import { persistTheme, useThemeStore } from './qr-tetris/themeStore';
 import type { GState } from './qr-tetris/types';
@@ -38,6 +40,7 @@ export default function QrTetrisGame() {
   const theme = useThemeStore();
   const [viewport, setViewport] = useState(getViewport);
   const [isCoarsePointer, setIsCoarsePointer] = useState(false);
+  const generatorRef = useRef<GameGenerator | null>(null);
 
   const handleTheme = useCallback((nextTheme: typeof theme) => {
     persistTheme(nextTheme);
@@ -131,15 +134,23 @@ export default function QrTetrisGame() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      // Unmount: stop the worker; the request in flight is rejected as cancelled.
+      generatorRef.current?.dispose();
+      generatorRef.current = null;
+    };
+  }, []);
+
   const startGame = useCallback(async () => {
+    const text = gs.inputText.trim() || 'https://example.com';
+
     setLoading(true);
     setError(null);
     try {
-      const text = gs.inputText.trim() || 'https://example.com';
-      const { matrix, size } = await buildQR(text);
-      // Yield to the event loop so the loading state renders before the synchronous solver runs.
-      await new Promise(resolve => setTimeout(resolve, 0));
-      const pieces = buildPlayablePieces(matrix, size);
+      // QR encoding + tiling run in a Web Worker (main-thread fallback inside the generator).
+      generatorRef.current ??= createGameGenerator();
+      const { matrix, size, pieces } = await generatorRef.current.generate(text);
       const first = pieces[0];
 
       setGs({
@@ -154,11 +165,12 @@ export default function QrTetrisGame() {
         inputText: text,
       });
     } catch (err) {
+      // Superseded by a newer request (latest wins) or unmounted: that request owns the UI state now.
+      if (err instanceof GenerationCancelledError) return;
       console.error('Failed to build a playable QR layout:', err);
       setError('Impossible de générer une partie pour ce texte. Vérifiez qu’il n’est pas trop long, puis réessayez.');
-    } finally {
-      setLoading(false);
     }
+    setLoading(false);
   }, [gs.inputText]);
 
   const restart = useCallback(() => setGs(state => ({ ...INIT, inputText: state.inputText })), []);

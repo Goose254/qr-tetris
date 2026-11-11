@@ -240,6 +240,7 @@ export function InputScreen({
         <button
           onClick={onStart}
           disabled={loading}
+          aria-busy={loading}
           style={{
             background: theme.accent,
             color: '#000000',
