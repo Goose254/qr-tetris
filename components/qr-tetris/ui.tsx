@@ -1,18 +1,8 @@
 import { useState, type Dispatch, type SetStateAction } from 'react';
 
-import { ACCENTS } from './constants';
+import { ACCENTS, FINDER_PATTERN } from './constants';
 import { tk } from './theme';
 import type { GState, Piece, Theme } from './types';
-
-const FINDER_PATTERN = [
-  [1, 1, 1, 1, 1, 1, 1],
-  [1, 0, 0, 0, 0, 0, 1],
-  [1, 0, 1, 1, 1, 0, 1],
-  [1, 0, 1, 1, 1, 0, 1],
-  [1, 0, 1, 1, 1, 0, 1],
-  [1, 0, 0, 0, 0, 0, 1],
-  [1, 1, 1, 1, 1, 1, 1],
-];
 
 function FinderIcon({ color, size = 5 }: { color: string; size?: number }) {
   return (

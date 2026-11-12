@@ -7,6 +7,17 @@ export const SKY_ROWS = 10;
 export const THEME_KEY = 'qr-tetris-theme';
 export const BLOCK_SIZE = 4;
 
+// A QR finder pattern (7×7 modules): the logo of the app, drawn in the title and the favicon.
+export const FINDER_PATTERN = [
+  [1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0, 0, 1],
+  [1, 0, 1, 1, 1, 0, 1],
+  [1, 0, 1, 1, 1, 0, 1],
+  [1, 0, 1, 1, 1, 0, 1],
+  [1, 0, 0, 0, 0, 0, 1],
+  [1, 1, 1, 1, 1, 1, 1],
+];
+
 export const DEFAULT_THEME: Theme = { mode: 'dark', accent: '#22c55e' };
 
 export const ACCENTS = [

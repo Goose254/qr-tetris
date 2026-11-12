@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { CELL_SIZE_MAX, CELL_SIZE_MIN, FALL_MS } from './qr-tetris/constants';
+import { applyFavicon } from './qr-tetris/favicon';
 import GameBoard from './qr-tetris/GameBoard';
 import { createGameGenerator, GenerationCancelledError } from './qr-tetris/gameGenerator';
 import type { GameGenerator } from './qr-tetris/gameGenerator';
@@ -70,18 +71,9 @@ export default function QrTetrisGame() {
     document.body.style.backgroundColor = tk(theme).bg;
   }, [theme]);
 
+  // The tab icon follows the accent colour (favicon.ts); app/icon.svg is the static default.
   useEffect(() => {
-    const a = theme.accent;
-    const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 216 216"><g transform="translate(24 24)"><rect width="24" height="24" fill="${a}"/><rect x="24" width="24" height="24" fill="${a}"/><rect x="48" width="24" height="24" fill="${a}"/><rect x="72" width="24" height="24" fill="${a}"/><rect x="96" width="24" height="24" fill="${a}"/><rect x="120" width="24" height="24" fill="${a}"/><rect x="144" width="24" height="24" fill="${a}"/><rect y="24" width="24" height="24" fill="${a}"/><rect x="144" y="24" width="24" height="24" fill="${a}"/><rect y="48" width="24" height="24" fill="${a}"/><rect x="48" y="48" width="24" height="24" fill="${a}"/><rect x="72" y="48" width="24" height="24" fill="${a}"/><rect x="96" y="48" width="24" height="24" fill="${a}"/><rect x="144" y="48" width="24" height="24" fill="${a}"/><rect y="72" width="24" height="24" fill="${a}"/><rect x="48" y="72" width="24" height="24" fill="${a}"/><rect x="72" y="72" width="24" height="24" fill="${a}"/><rect x="96" y="72" width="24" height="24" fill="${a}"/><rect x="48" y="96" width="24" height="24" fill="${a}"/><rect x="72" y="96" width="24" height="24" fill="${a}"/><rect x="96" y="96" width="24" height="24" fill="${a}"/><rect x="144" y="72" width="24" height="24" fill="${a}"/><rect y="96" width="24" height="24" fill="${a}"/><rect x="144" y="96" width="24" height="24" fill="${a}"/><rect y="120" width="24" height="24" fill="${a}"/><rect x="144" y="120" width="24" height="24" fill="${a}"/><rect y="144" width="24" height="24" fill="${a}"/><rect x="24" y="144" width="24" height="24" fill="${a}"/><rect x="48" y="144" width="24" height="24" fill="${a}"/><rect x="72" y="144" width="24" height="24" fill="${a}"/><rect x="96" y="144" width="24" height="24" fill="${a}"/><rect x="120" y="144" width="24" height="24" fill="${a}"/><rect x="144" y="144" width="24" height="24" fill="${a}"/></g><g transform="translate(150 150)"><rect width="30" height="30" rx="7" fill="#fff"/><rect x="30" width="30" height="30" rx="7" fill="#fff"/><rect y="30" width="30" height="30" rx="7" fill="#fff"/><rect x="30" y="30" width="30" height="30" rx="7" fill="#fff"/></g></svg>`;
-    const href = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
-    let link = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
-    if (!link) {
-      link = document.createElement('link');
-      link.rel = 'icon';
-      document.head.appendChild(link);
-    }
-    link.type = 'image/svg+xml';
-    link.href = href;
+    applyFavicon(theme.accent);
   }, [theme.accent]);
 
   // Keyboard, on-screen controls and gravity all go through the same transition (moves.ts).
