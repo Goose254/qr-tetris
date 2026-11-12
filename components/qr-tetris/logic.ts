@@ -439,12 +439,9 @@ function buildRegionPlan(blockCount: number): MacroRegion[] {
     }
   }
 
-  return regions.sort((left, right) => {
-    const leftBottom = left.top + left.height;
-    const rightBottom = right.top + right.height;
-    if (leftBottom !== rightBottom) return rightBottom - leftBottom;
-    return Math.random() < 0.5 ? -1 : 1;
-  });
+  // Bottom-most regions first, in a uniformly random order among regions that end on the
+  // same row: shuffle, then rely on the stable sort to keep that order for equal keys.
+  return shuffle(regions).sort((left, right) => (right.top + right.height) - (left.top + left.height));
 }
 
 // Cells for a region, extending into the QR border row/col for the last block row/col.
@@ -493,10 +490,8 @@ function splitRegion(region: MacroRegion): MacroRegion[] {
     }
   }
 
-  return blocks.sort((left, right) => {
-    if (left.top !== right.top) return right.top - left.top;
-    return Math.random() < 0.5 ? -1 : 1;
-  });
+  // Bottom row first, uniformly random order within a row (shuffle + stable sort).
+  return shuffle(blocks).sort((left, right) => right.top - left.top);
 }
 
 export function buildPlayablePieces(matrix: boolean[][], size: number): Piece[] {
