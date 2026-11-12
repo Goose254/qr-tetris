@@ -6,7 +6,9 @@ import { CELL_SIZE_MAX, CELL_SIZE_MIN, FALL_MS } from './qr-tetris/constants';
 import GameBoard from './qr-tetris/GameBoard';
 import { createGameGenerator, GenerationCancelledError } from './qr-tetris/gameGenerator';
 import type { GameGenerator } from './qr-tetris/gameGenerator';
-import { calcDropRow, canPlace, lockPiece, seededBoard } from './qr-tetris/logic';
+import { calcDropRow, seededBoard } from './qr-tetris/logic';
+import { applyMove, KEY_MOVES } from './qr-tetris/moves';
+import type { Move } from './qr-tetris/moves';
 import { tk } from './qr-tetris/theme';
 import { persistTheme, useThemeStore } from './qr-tetris/themeStore';
 import type { GState } from './qr-tetris/types';
@@ -82,57 +84,29 @@ export default function QrTetrisGame() {
     link.href = href;
   }, [theme.accent]);
 
+  // Keyboard, on-screen controls and gravity all go through the same transition (moves.ts).
+  const move = useCallback((kind: Move) => setGs(prev => applyMove(prev, kind)), []);
+
   useEffect(() => {
     if (gs.status !== 'playing') return;
 
-    const timer = setInterval(() => {
-      setGs(prev => {
-        if (prev.status !== 'playing') return prev;
-        const piece = prev.pieces[prev.currentIndex];
-        const nextRow = prev.currentRow + 1;
-        if (canPlace(piece, prev.currentCol, nextRow, prev.board)) {
-          return { ...prev, currentRow: nextRow };
-        }
-        return lockPiece(prev, prev.currentCol, prev.currentRow);
-      });
-    }, FALL_MS);
+    // Gravity: one soft drop per tick; the piece locks when it cannot go lower.
+    const timer = setInterval(() => move('softDrop'), FALL_MS);
 
     return () => clearInterval(timer);
-  }, [gs.status]);
+  }, [gs.status, move]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (!['ArrowLeft', 'ArrowRight', 'ArrowDown', ' '].includes(event.key)) return;
+      const kind = KEY_MOVES.get(event.key);
+      if (!kind) return;
       event.preventDefault();
-
-      setGs(prev => {
-        if (prev.status !== 'playing') return prev;
-        const piece = prev.pieces[prev.currentIndex];
-
-        if (event.key === 'ArrowLeft') {
-          const nextCol = prev.currentCol - 1;
-          return canPlace(piece, nextCol, prev.currentRow, prev.board) ? { ...prev, currentCol: nextCol } : prev;
-        }
-
-        if (event.key === 'ArrowRight') {
-          const nextCol = prev.currentCol + 1;
-          return canPlace(piece, nextCol, prev.currentRow, prev.board) ? { ...prev, currentCol: nextCol } : prev;
-        }
-
-        if (event.key === 'ArrowDown') {
-          const nextRow = prev.currentRow + 1;
-          if (canPlace(piece, prev.currentCol, nextRow, prev.board)) return { ...prev, currentRow: nextRow };
-          return lockPiece(prev, prev.currentCol, prev.currentRow);
-        }
-
-        const ghostRow = calcDropRow(piece, prev.currentCol, prev.currentRow, prev.board);
-        return lockPiece(prev, prev.currentCol, ghostRow);
-      });
+      move(kind);
     };
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, []);
+  }, [move]);
 
   useEffect(() => {
     return () => {
@@ -175,42 +149,10 @@ export default function QrTetrisGame() {
 
   const restart = useCallback(() => setGs(state => ({ ...INIT, inputText: state.inputText })), []);
 
-  const moveLeft = useCallback(() => {
-    setGs(prev => {
-      if (prev.status !== 'playing') return prev;
-      const piece = prev.pieces[prev.currentIndex];
-      const nextCol = prev.currentCol - 1;
-      return canPlace(piece, nextCol, prev.currentRow, prev.board) ? { ...prev, currentCol: nextCol } : prev;
-    });
-  }, []);
-
-  const moveRight = useCallback(() => {
-    setGs(prev => {
-      if (prev.status !== 'playing') return prev;
-      const piece = prev.pieces[prev.currentIndex];
-      const nextCol = prev.currentCol + 1;
-      return canPlace(piece, nextCol, prev.currentRow, prev.board) ? { ...prev, currentCol: nextCol } : prev;
-    });
-  }, []);
-
-  const softDrop = useCallback(() => {
-    setGs(prev => {
-      if (prev.status !== 'playing') return prev;
-      const piece = prev.pieces[prev.currentIndex];
-      const nextRow = prev.currentRow + 1;
-      if (canPlace(piece, prev.currentCol, nextRow, prev.board)) return { ...prev, currentRow: nextRow };
-      return lockPiece(prev, prev.currentCol, prev.currentRow);
-    });
-  }, []);
-
-  const hardDrop = useCallback(() => {
-    setGs(prev => {
-      if (prev.status !== 'playing') return prev;
-      const piece = prev.pieces[prev.currentIndex];
-      const ghostRow = calcDropRow(piece, prev.currentCol, prev.currentRow, prev.board);
-      return lockPiece(prev, prev.currentCol, ghostRow);
-    });
-  }, []);
+  const moveLeft = useCallback(() => move('left'), [move]);
+  const moveRight = useCallback(() => move('right'), [move]);
+  const softDrop = useCallback(() => move('softDrop'), [move]);
+  const hardDrop = useCallback(() => move('hardDrop'), [move]);
 
   if (gs.status === 'input') {
     return <InputScreen gs={gs} setGs={setGs} onStart={startGame} loading={loading} error={error} theme={theme} onThemeChange={handleTheme} />;
