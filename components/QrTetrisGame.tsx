@@ -8,7 +8,7 @@ import GameBoard from './qr-tetris/GameBoard';
 import { createGameGenerator, GenerationCancelledError } from './qr-tetris/gameGenerator';
 import type { GameGenerator } from './qr-tetris/gameGenerator';
 import { calcDropRow, seededBoard } from './qr-tetris/logic';
-import { applyMove, KEY_MOVES } from './qr-tetris/moves';
+import { applyMove, isTextEntry, moveForKey } from './qr-tetris/moves';
 import type { Move } from './qr-tetris/moves';
 import { tk } from './qr-tetris/theme';
 import { persistTheme, useThemeStore } from './qr-tetris/themeStore';
@@ -90,7 +90,7 @@ export default function QrTetrisGame() {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      const kind = KEY_MOVES.get(event.key);
+      const kind = moveForKey(event.key, gs.status === 'playing', isTextEntry(event.target));
       if (!kind) return;
       event.preventDefault();
       move(kind);
@@ -98,7 +98,7 @@ export default function QrTetrisGame() {
 
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
-  }, [move]);
+  }, [gs.status, move]);
 
   useEffect(() => {
     return () => {

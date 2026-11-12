@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { emptyBoard } from './logic';
-import { applyMove, KEY_MOVES } from './moves';
+import { applyMove, KEY_MOVES, moveForKey } from './moves';
 import type { GState, Piece } from './types';
 
 // 2×2 square piece, all black. Its target is the bottom-left corner of a 4-wide, 6-high board.
@@ -195,5 +195,25 @@ describe('applyMove', () => {
     state = applyMove(state, 'right');
     state = applyMove(state, 'hardDrop');
     expect(state.status).toBe('win');
+  });
+});
+
+describe('moveForKey', () => {
+  it('maps the game keys while a game is running', () => {
+    expect(moveForKey('ArrowLeft', true, false)).toBe('left');
+    expect(moveForKey('ArrowRight', true, false)).toBe('right');
+    expect(moveForKey('ArrowDown', true, false)).toBe('softDrop');
+    expect(moveForKey(' ', true, false)).toBe('hardDrop');
+    expect(moveForKey('a', true, false)).toBeNull();
+  });
+
+  // Regression: the handler used to swallow these keys on the input screen, so a space
+  // could not be typed in the QR text and the arrows did not move the caret.
+  it('leaves every key to the browser when no game is running', () => {
+    for (const key of KEY_MOVES.keys()) expect(moveForKey(key, false, false)).toBeNull();
+  });
+
+  it('leaves every key to the browser while the focus is in a text field', () => {
+    for (const key of KEY_MOVES.keys()) expect(moveForKey(key, true, true)).toBeNull();
   });
 });
