@@ -106,10 +106,30 @@ function getShapeKey(coords: CellCoord[]): string {
     .join('|');
 }
 
-export function shuffle<T>(arr: T[]): T[] {
+// A source of uniform random numbers in [0, 1), with the contract of Math.random.
+// Every random decision of the solver draws from one, so a seeded source (mulberry32)
+// makes a whole generation reproducible; the default stays Math.random.
+export type RandomSource = () => number;
+
+// mulberry32: a small seeded PRNG (32-bit state, uniform in [0, 1)). Not cryptographic;
+// it is only used to make the solver reproducible, in tests for instance.
+export function mulberry32(seed: number): RandomSource {
+  let state = seed >>> 0;
+
+  return () => {
+    state = (state + 0x6d2b79f5) >>> 0;
+    let t = state;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Fisher-Yates shuffle: returns a new array, each permutation being equally likely.
+export function shuffle<T>(arr: T[], rng: RandomSource = Math.random): T[] {
   const copy = [...arr];
   for (let i = copy.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(rng() * (i + 1));
     [copy[i], copy[j]] = [copy[j], copy[i]];
   }
   return copy;
@@ -303,6 +323,7 @@ function chooseNextCell(
   covered: boolean[][],
   board: (boolean | null)[][],
   placementsByCell: Map<string, PlacementCandidate[]>,
+  rng: RandomSource,
 ): { cell: CellCoord; options: PlayableOption[] } | null {
   const optionCache = new Map<string, PlayableOption | null>();
 
@@ -313,7 +334,8 @@ function chooseNextCell(
   // cells temporarily have no playable options until the rows below are covered.
   for (let row = size - 1; row >= 0; row--) {
     const rowCells = shuffle(
-      Array.from({ length: size }, (_, col) => ({ row, col })).filter(cell => !covered[cell.row][cell.col])
+      Array.from({ length: size }, (_, col) => ({ row, col })).filter(cell => !covered[cell.row][cell.col]),
+      rng,
     );
 
     if (rowCells.length === 0) continue;
@@ -339,7 +361,7 @@ function chooseNextCell(
       if (options.length === 0) return { cell, options: [] };
 
       if (best === null || options.length < best.options.length) {
-        best = { cell, options: shuffle(options) };
+        best = { cell, options: shuffle(options, rng) };
         if (best.options.length === 1) return best;
       }
     }
@@ -354,7 +376,13 @@ function coveredStateKey(covered: boolean[][]) {
   return covered.map(row => row.map(cell => (cell ? '1' : '0')).join('')).join('|');
 }
 
-function solveCandidateSet(size: number, board: (boolean | null)[][], index: PlacementIndex, covered: boolean[][]): Piece[] | null {
+function solveCandidateSet(
+  size: number,
+  board: (boolean | null)[][],
+  index: PlacementIndex,
+  covered: boolean[][],
+  rng: RandomSource,
+): Piece[] | null {
   const deadline = Date.now() + SOLVE_MAX_MS;
   const deadEnds = new Set<string>();
   const shapeUsage = new Map<string, number>();
@@ -367,7 +395,7 @@ function solveCandidateSet(size: number, board: (boolean | null)[][], index: Pla
     const stateKey = coveredStateKey(covered);
     if (deadEnds.has(stateKey)) return null;
 
-    const choice = chooseNextCell(size, covered, board, index.byCell);
+    const choice = chooseNextCell(size, covered, board, index.byCell, rng);
     if (!choice) return [];
     if (choice.options.length === 0) {
       deadEnds.add(stateKey);
@@ -404,7 +432,7 @@ function solveCandidateSet(size: number, board: (boolean | null)[][], index: Pla
 }
 
 
-function buildRegionPlan(blockCount: number): MacroRegion[] {
+function buildRegionPlan(blockCount: number, rng: RandomSource): MacroRegion[] {
   const covered = Array.from({ length: blockCount }, () => Array(blockCount).fill(false));
   const regions: MacroRegion[] = [];
 
@@ -413,7 +441,7 @@ function buildRegionPlan(blockCount: number): MacroRegion[] {
       if (covered[row][col]) continue;
 
       const shape =
-        shuffle(REGION_SHAPES).find(candidate => {
+        shuffle(REGION_SHAPES, rng).find(candidate => {
           if (row + candidate.height > blockCount || col + candidate.width > blockCount) return false;
           // Multi-block regions must not absorb the border row/col — those extra cells
           // (row/col size-1) are handled exclusively by the 1×1 blocks at the last
@@ -441,7 +469,7 @@ function buildRegionPlan(blockCount: number): MacroRegion[] {
 
   // Bottom-most regions first, in a uniformly random order among regions that end on the
   // same row: shuffle, then rely on the stable sort to keep that order for equal keys.
-  return shuffle(regions).sort((left, right) => (right.top + right.height) - (left.top + left.height));
+  return shuffle(regions, rng).sort((left, right) => (right.top + right.height) - (left.top + left.height));
 }
 
 // Cells for a region, extending into the QR border row/col for the last block row/col.
@@ -470,7 +498,7 @@ function buildRegionCells(region: MacroRegion, size: number): CellCoord[] {
   return cells;
 }
 
-function solveRegion(size: number, board: (boolean | null)[][], index: PlacementIndex, region: MacroRegion) {
+function solveRegion(size: number, board: (boolean | null)[][], index: PlacementIndex, region: MacroRegion, rng: RandomSource) {
   const regionCells = buildRegionCells(region, size);
   const allowed = new Set(regionCells.map(cell => cellKey(cell)));
   const candidates = index.all.filter(candidate => candidate.coords.every(coord => allowed.has(cellKey(coord))));
@@ -478,10 +506,10 @@ function solveRegion(size: number, board: (boolean | null)[][], index: Placement
 
   for (const cell of regionCells) covered[cell.row][cell.col] = false;
 
-  return solveCandidateSet(size, board, buildSubsetIndex(candidates), covered);
+  return solveCandidateSet(size, board, buildSubsetIndex(candidates), covered, rng);
 }
 
-function splitRegion(region: MacroRegion): MacroRegion[] {
+function splitRegion(region: MacroRegion, rng: RandomSource): MacroRegion[] {
   const blocks: MacroRegion[] = [];
 
   for (let row = region.top; row < region.top + region.height; row++) {
@@ -491,10 +519,13 @@ function splitRegion(region: MacroRegion): MacroRegion[] {
   }
 
   // Bottom row first, uniformly random order within a row (shuffle + stable sort).
-  return shuffle(blocks).sort((left, right) => right.top - left.top);
+  return shuffle(blocks, rng).sort((left, right) => right.top - left.top);
 }
 
-export function buildPlayablePieces(matrix: boolean[][], size: number): Piece[] {
+// `rng` is optional: without it every call draws from Math.random and gives a different
+// layout. With a seeded source (mulberry32) the same matrix always gives the same pieces,
+// as long as no region solve is cut short by its time bound (SOLVE_MAX_MS).
+export function buildPlayablePieces(matrix: boolean[][], size: number, rng: RandomSource = Math.random): Piece[] {
   if (((size * size) - 1) % TETROMINO_CELLS !== 0) {
     throw new Error('QR grid cannot be tiled by tetrominoes with a single anchor cell.');
   }
@@ -508,8 +539,8 @@ export function buildPlayablePieces(matrix: boolean[][], size: number): Piece[] 
     const solved: Piece[] = [];
     let failed = false;
 
-    for (const region of buildRegionPlan(blockCount)) {
-      const regionPieces = solveRegion(size, board, index, region);
+    for (const region of buildRegionPlan(blockCount, rng)) {
+      const regionPieces = solveRegion(size, board, index, region, rng);
       if (regionPieces) {
         solved.push(...regionPieces);
         continue;
@@ -517,8 +548,8 @@ export function buildPlayablePieces(matrix: boolean[][], size: number): Piece[] 
 
       let splitFailed = false;
 
-      for (const singleBlock of splitRegion(region)) {
-        const blockPieces = solveRegion(size, board, index, singleBlock);
+      for (const singleBlock of splitRegion(region, rng)) {
+        const blockPieces = solveRegion(size, board, index, singleBlock, rng);
         if (!blockPieces) {
           splitFailed = true;
           break;
@@ -545,7 +576,7 @@ export function buildPlayablePieces(matrix: boolean[][], size: number): Piece[] 
 
   const candidates = [...attempts.values()];
   if (candidates.length === 0) throw new Error('Unable to generate a playable tetromino layout.');
-  return candidates[Math.floor(Math.random() * candidates.length)];
+  return candidates[Math.floor(rng() * candidates.length)];
 }
 
 export const emptyBoard = (height: number, width: number): (boolean | null)[][] =>

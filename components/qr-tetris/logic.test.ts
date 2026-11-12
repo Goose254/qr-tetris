@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { SKY_ROWS } from './constants';
 import {
@@ -8,10 +8,14 @@ import {
   canPlace,
   emptyBoard,
   lockPiece,
+  mulberry32,
   seededBoard,
   shuffle,
 } from './logic';
 import type { GState, Piece } from './types';
+
+// Graine fixe de tous les tests qui dépendent du hasard : leurs tirages sont reproductibles.
+const SEED = 20260101;
 
 // Pièce carrée 2×2 (O) entièrement noire, pratique pour les tests de placement.
 function makeSquarePiece(overrides: Partial<Piece> = {}): Piece {
@@ -171,6 +175,28 @@ describe('lockPiece', () => {
   });
 });
 
+describe('mulberry32', () => {
+  it('produit la même suite pour une même graine, dans [0, 1)', () => {
+    const first = mulberry32(SEED);
+    const second = mulberry32(SEED);
+
+    for (let i = 0; i < 1000; i++) {
+      const value = first();
+      expect(value).toBe(second());
+      expect(value).toBeGreaterThanOrEqual(0);
+      expect(value).toBeLessThan(1);
+    }
+  });
+
+  it('produit des suites différentes pour des graines différentes', () => {
+    const first = mulberry32(1);
+    const second = mulberry32(2);
+    const draws = (rng: () => number) => Array.from({ length: 8 }, () => rng());
+
+    expect(draws(first)).not.toEqual(draws(second));
+  });
+});
+
 describe('shuffle', () => {
   it('conserve tous les éléments sans muter le tableau d’origine', () => {
     const input = [1, 2, 3, 4, 5, 6, 7, 8];
@@ -179,6 +205,38 @@ describe('shuffle', () => {
 
     expect(input).toEqual(copy);
     expect([...result].sort((a, b) => a - b)).toEqual(copy);
+  });
+
+  it('avec une source à graine, donne une permutation reproductible', () => {
+    const input = Array.from({ length: 50 }, (_, index) => index);
+    const first = shuffle(input, mulberry32(SEED));
+    const second = shuffle(input, mulberry32(SEED));
+
+    expect(first).toEqual(second);
+    expect(first).not.toEqual(input); // 50! ordres possibles : l'identité serait un bug
+    expect([...first].sort((a, b) => a - b)).toEqual(input);
+    expect(shuffle(input, mulberry32(SEED + 1))).not.toEqual(first);
+  });
+
+  it('n’est pas visiblement biaisé : les 24 permutations de 4 éléments sortent à la même fréquence', () => {
+    const rng = mulberry32(SEED);
+    const runs = 24000;
+    const counts = new Map<string, number>();
+
+    for (let run = 0; run < runs; run++) {
+      const key = shuffle([0, 1, 2, 3], rng).join('');
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+
+    // Attendu : 1000 tirages par permutation, écart-type ≈ 31. La tolérance de ±15 % (≈ 5 σ)
+    // laisse passer un mélange uniforme et rejette un tri à comparateur aléatoire, dont les
+    // permutations les plus fréquentes sortent plusieurs fois plus souvent que les plus rares.
+    const expected = runs / 24;
+    expect(counts.size).toBe(24);
+    for (const count of counts.values()) {
+      expect(count).toBeGreaterThan(expected * 0.85);
+      expect(count).toBeLessThan(expected * 1.15);
+    }
   });
 });
 
@@ -198,78 +256,134 @@ describe('buildQR', () => {
   });
 });
 
-describe('buildPlayablePieces (solveur)', () => {
-  it(
-    'pave exactement tous les modules du QR avec des tétrominos, sans chevauchement',
-    async () => {
-      const { matrix, size } = await buildQR('https://example.com');
-      const pieces = buildPlayablePieces(matrix, size);
+// Vérifie qu'un jeu de pièces pave exactement la grille : tétrominos, dans les limites,
+// sans chevauchement, aux couleurs du QR, toutes les cellules couvertes sauf l'ancre.
+function expectValidTiling(matrix: boolean[][], size: number, pieces: Piece[]) {
+  // Toutes les cellules sauf l'ancre pré-posée doivent être couvertes.
+  expect(pieces.length * 4).toBe(size * size - 1);
 
-      // Toutes les cellules sauf l'ancre pré-posée doivent être couvertes.
-      expect(pieces.length * 4).toBe(size * size - 1);
+  const covered = Array.from({ length: size }, () => Array<boolean>(size).fill(false));
+  covered[size - 1][size - 1] = true; // cellule ancre pré-posée
 
-      const covered = Array.from({ length: size }, () => Array<boolean>(size).fill(false));
-      covered[size - 1][size - 1] = true; // cellule ancre pré-posée
+  for (const piece of pieces) {
+    let maskCells = 0;
 
-      for (const piece of pieces) {
-        let maskCells = 0;
+    for (let r = 0; r < piece.height; r++) {
+      for (let c = 0; c < piece.width; c++) {
+        if (!piece.mask[r][c]) continue;
+        maskCells++;
 
-        for (let r = 0; r < piece.height; r++) {
-          for (let c = 0; c < piece.width; c++) {
-            if (!piece.mask[r][c]) continue;
-            maskCells++;
+        const qrRow = piece.expectedRow - SKY_ROWS + r;
+        const qrCol = piece.expectedCol + c;
 
-            const qrRow = piece.expectedRow - SKY_ROWS + r;
-            const qrCol = piece.expectedCol + c;
+        expect(qrRow).toBeGreaterThanOrEqual(0);
+        expect(qrRow).toBeLessThan(size);
+        expect(qrCol).toBeGreaterThanOrEqual(0);
+        expect(qrCol).toBeLessThan(size);
 
-            expect(qrRow).toBeGreaterThanOrEqual(0);
-            expect(qrRow).toBeLessThan(size);
-            expect(qrCol).toBeGreaterThanOrEqual(0);
-            expect(qrCol).toBeLessThan(size);
+        // Pas de chevauchement.
+        expect(covered[qrRow][qrCol]).toBe(false);
+        covered[qrRow][qrCol] = true;
 
-            // Pas de chevauchement.
-            expect(covered[qrRow][qrCol]).toBe(false);
-            covered[qrRow][qrCol] = true;
-
-            // La pièce transporte la couleur du module QR correspondant.
-            expect(piece.cells[r][c]).toBe(matrix[qrRow][qrCol]);
-          }
-        }
-
-        // Chaque pièce est bien un tétromino.
-        expect(maskCells).toBe(4);
+        // La pièce transporte la couleur du module QR correspondant.
+        expect(piece.cells[r][c]).toBe(matrix[qrRow][qrCol]);
       }
+    }
 
-      // Couverture totale.
-      expect(covered.every(row => row.every(Boolean))).toBe(true);
+    // Chaque pièce est bien un tétromino.
+    expect(maskCells).toBe(4);
+  }
+
+  // Couverture totale.
+  expect(covered.every(row => row.every(Boolean))).toBe(true);
+}
+
+// Rejoue les pièces dans l'ordre, chacune verrouillée à sa cible : la partie doit être gagnée.
+function expectWinnableGame(matrix: boolean[][], size: number, pieces: Piece[]) {
+  let state: GState = {
+    status: 'playing',
+    qrMatrix: matrix,
+    qrSize: size,
+    pieces,
+    board: seededBoard(matrix, size),
+    currentIndex: 0,
+    currentCol: pieces[0].spawnCol,
+    currentRow: 0,
+    inputText: 'https://example.com',
+  };
+
+  for (const piece of pieces) {
+    // La pièce doit pouvoir apparaître à sa colonne de spawn.
+    expect(canPlace(piece, piece.spawnCol, 0, state.board)).toBe(true);
+    // Verrouillée à sa position cible, la partie continue (ou se termine en win).
+    state = lockPiece({ ...state, currentCol: piece.expectedCol }, piece.expectedCol, piece.expectedRow);
+    expect(state.status).not.toBe('gameover');
+  }
+
+  expect(state.status).toBe('win');
+}
+
+// Le solveur tire tout son aléa d'une source injectable : avec mulberry32 et une graine fixe,
+// ces tests rejouent toujours exactement le même pavage. (Seule la borne en temps d'une région,
+// 3 s, pourrait faire diverger deux exécutions ; une génération entière dure ici ≈ 3 s pour
+// quelques centaines de résolutions de région, donc aucune ne s'en approche.)
+describe('buildPlayablePieces (solveur)', () => {
+  let matrix: boolean[][];
+  let size: number;
+  let pieces: Piece[];
+
+  beforeAll(async () => {
+    ({ matrix, size } = await buildQR('https://example.com'));
+    pieces = buildPlayablePieces(matrix, size, mulberry32(SEED));
+  }, 60000);
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('pave exactement tous les modules du QR avec des tétrominos, sans chevauchement', () => {
+    expectValidTiling(matrix, size, pieces);
+  });
+
+  it('rejoue chaque pièce comme une partie de Tetris gagnante', () => {
+    expectWinnableGame(matrix, size, pieces);
+  });
+
+  it(
+    'donne exactement les mêmes pièces pour une même graine, sans jamais appeler Math.random',
+    () => {
+      const random = vi.spyOn(Math, 'random');
+      const again = buildPlayablePieces(matrix, size, mulberry32(SEED));
+
+      expect(again).toEqual(pieces);
+      expect(random).not.toHaveBeenCalled();
     },
     60000,
   );
 
-  it('rejoue chaque pièce comme une partie de Tetris gagnante', async () => {
-    const { matrix, size } = await buildQR('https://example.com');
-    const pieces = buildPlayablePieces(matrix, size);
+  it(
+    'donne un autre pavage, tout aussi valide et gagnable, pour une autre graine',
+    () => {
+      const other = buildPlayablePieces(matrix, size, mulberry32(SEED + 1));
 
-    let state: GState = {
-      status: 'playing',
-      qrMatrix: matrix,
-      qrSize: size,
-      pieces,
-      board: seededBoard(matrix, size),
-      currentIndex: 0,
-      currentCol: pieces[0].spawnCol,
-      currentRow: 0,
-      inputText: 'https://example.com',
-    };
+      expect(other).not.toEqual(pieces);
+      expectValidTiling(matrix, size, other);
+      expectWinnableGame(matrix, size, other);
+    },
+    60000,
+  );
 
-    for (const piece of pieces) {
-      // La pièce doit pouvoir apparaître à sa colonne de spawn.
-      expect(canPlace(piece, piece.spawnCol, 0, state.board)).toBe(true);
-      // Verrouillée à sa position cible, la partie continue (ou se termine en win).
-      state = lockPiece({ ...state, currentCol: piece.expectedCol }, piece.expectedCol, piece.expectedRow);
-      expect(state.status).not.toBe('gameover');
-    }
+  it(
+    'sans source fournie, tire son aléa de Math.random et reste valide (comportement de production)',
+    async () => {
+      const small = await buildQR('QR');
+      const random = vi.spyOn(Math, 'random');
+      const unseeded = buildPlayablePieces(small.matrix, small.size);
 
-    expect(state.status).toBe('win');
-  }, 60000);
+      expect(random).toHaveBeenCalled();
+      expectValidTiling(small.matrix, small.size, unseeded);
+      expectWinnableGame(small.matrix, small.size, unseeded);
+    },
+    60000,
+  );
 });
