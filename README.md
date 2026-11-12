@@ -50,7 +50,7 @@ Tout ce calcul (encodage du QR + pavage) s'exécute dans un **Web Worker** (`com
 
 - [Next.js 16](https://nextjs.org/) (App Router) + [React 19](https://react.dev/)
 - [TypeScript](https://www.typescriptlang.org/) (mode strict)
-- [Tailwind CSS 4](https://tailwindcss.com/)
+- Styles en ligne (`style`) et une feuille globale minimale (`app/globals.css`), sans framework CSS
 - [qrcode](https://www.npmjs.com/package/qrcode) pour l'encodage QR
 - [Vitest](https://vitest.dev/) pour les tests unitaires
 

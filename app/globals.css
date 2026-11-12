@@ -1,16 +1,63 @@
-@import "tailwindcss";
+/*
+ * Global styles. Components are styled with inline `style` props; this file only holds what
+ * cannot be inline: the base reset, the page frame and the spinner keyframes.
+ *
+ * The reset is the part of Tailwind 4's preflight this app relied on while Tailwind was a
+ * dependency, kept so that removing it changed nothing on screen. Inline styles assume it:
+ * buttons carry no padding of their own, text takes its line height from `html`, form
+ * controls inherit their font.
+ */
 
-* {
+*,
+::before,
+::after,
+::backdrop,
+::file-selector-button {
   box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+  border: 0 solid;
+}
+
+html {
+  height: 100%;
+  line-height: 1.5;
+  -webkit-text-size-adjust: 100%;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #09090f;
+  font-family: "Segoe UI", system-ui, sans-serif;
+}
+
+/* Form controls take their typography and colours from their parent, not from the browser. */
+button,
+input {
+  font: inherit;
+  font-feature-settings: inherit;
+  font-variation-settings: inherit;
+  letter-spacing: inherit;
+  color: inherit;
+  border-radius: 0;
+  background-color: transparent;
+  opacity: 1;
+}
+
+button {
+  appearance: button;
+}
+
+/* Firefox: same focus ring as the other engines. */
+:-moz-focusring {
+  outline: auto;
 }
 
 @keyframes qrt-spin {
   to { transform: rotate(360deg); }
-}
-
-body {
-  margin: 0;
-  padding: 0;
-  background: #09090f;
-  font-family: "Segoe UI", system-ui, sans-serif;
 }
